@@ -1,0 +1,160 @@
+from flask import request, jsonify, render_template, session
+from app import app, supabase
+from datetime import datetime
+import logging
+from supabase import create_client, Client
+from gotrue.errors import AuthApiError
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+
+@app.route('/')
+def index():
+    return "Welcome to the Time Off Request App"
+
+@app.route('/request-time-off')
+def request_time_off_page():
+    return render_template('request_time_off.html')
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.json
+    try:
+        response = supabase.auth.sign_in_with_password({"email": data['email'], "password": data['password']})
+        user = response.user
+        session['user'] = user.email
+        session['access_token'] = response.session.access_token
+        session['refresh_token'] = response.session.refresh_token
+        return jsonify({'user': user.email}), 200
+    except Exception as e:
+        logger.error(f"Login failed: {str(e)}")
+        return jsonify({'error': 'Login failed'}), 400
+
+@app.route('/api/auth/logout')
+def logout():
+    session.pop('user', None)
+    return jsonify({'message': 'Logged out successfully'}), 200
+
+@app.route('/api/auth/user')
+def get_user():
+    user = session.get('user')
+    return jsonify({'user': user}), 200 if user else 401
+
+@app.route('/api/request-time-off', methods=['POST'])
+def request_time_off():
+    if 'user' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    data = request.json
+    
+    try:
+        access_token = session.get('access_token')
+        if not access_token:
+            return jsonify({'error': 'Authentication failed'}), 401
+
+        try:
+            user_response = supabase.auth.get_user(access_token)
+            user = user_response.user
+        except AuthApiError:
+            refresh_token = session.get('refresh_token')
+            if not refresh_token:
+                return jsonify({'error': 'Session expired. Please log in again.'}), 401
+            
+            refresh_response = supabase.auth.refresh_session(refresh_token)
+            session['access_token'] = refresh_response.session.access_token
+            session['refresh_token'] = refresh_response.session.refresh_token
+            user = refresh_response.user
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        employee = supabase.table('Employee').select('*').eq('email', user.email).execute()
+        if not employee.data:
+            return jsonify({'error': 'Employee not found'}), 404
+
+        employee_id = employee.data[0]['id']
+
+        start_date = datetime.strptime(data['start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(data['end_date'], '%Y-%m-%d').date()
+
+        if start_date <= datetime.now().date() or end_date < start_date:
+            return jsonify({'error': 'Invalid date range'}), 400
+
+        overlapping = supabase.table('TimeOffRequest').select('*').eq('employee_id', employee_id).lte('start_date', str(end_date)).gte('end_date', str(start_date)).execute()
+        if overlapping.data:
+            return jsonify({'error': 'Overlapping request exists'}), 400
+
+        new_request_data = {
+            'employee_id': employee_id,
+            'start_date': str(start_date),
+            'end_date': str(end_date),
+            'request_type': data['request_type'],
+            'comments': data.get('comments', ''),
+            'status': 'pending'
+        }
+
+        new_request = supabase.table('TimeOffRequest').insert(new_request_data).execute()
+
+        if new_request.data:
+            return jsonify({'message': 'Time off request submitted successfully'}), 201
+        else:
+            return jsonify({'error': 'Failed to submit request'}), 500
+
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}")
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+# This should be outside the route function
+# @app.before_first_request
+# def log_all_employees():
+#     all_employees = supabase.table('Employee').select('*').execute()
+#     logger.debug(f"All employees: {all_employees.data}")
+
+# Add this new function:
+@app.before_request
+def log_request_info():
+    logger.debug('Headers: %s', request.headers)
+    logger.debug('Body: %s', request.get_data())
+    logger.debug('URL: %s', request.url)
+
+@app.route('/api/test-employees')
+def test_employees():
+    try:
+        all_employees = supabase.table('Employee').select('*').execute()
+        return jsonify(all_employees.data), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/<path:undefined_route>')
+def undefined_route(undefined_route):
+    logger.warning(f"Attempted to access undefined route: {undefined_route}")
+    return jsonify({"error": "Route not found"}), 404
+
+@app.route('/debug/routes')
+def debug_routes():
+    routes = []
+    for rule in app.url_map.iter_rules():
+        routes.append({
+            "endpoint": rule.endpoint,
+            "methods": list(rule.methods),
+            "route": str(rule)
+        })
+    return jsonify(routes)
+
+@app.route('/api/auth/refresh', methods=['POST'])
+def refresh_token():
+    refresh_token = session.get('refresh_token')
+    if not refresh_token:
+        return jsonify({'error': 'No refresh token found'}), 401
+    
+    try:
+        refresh_response = supabase.auth.refresh_session(refresh_token)
+        session['access_token'] = refresh_response.session.access_token
+        session['refresh_token'] = refresh_response.session.refresh_token
+        return jsonify({'message': 'Token refreshed successfully'}), 200
+    except Exception as e:
+        logger.error(f"Token refresh failed: {str(e)}")
+        return jsonify({'error': 'Token refresh failed'}), 400

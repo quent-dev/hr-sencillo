@@ -1,0 +1,11 @@
+{
+    "scripts": {
+        "build": "babel components --out-dir ../backend/app/static/js"
+    },
+    "devDependencies": {
+        "@babel/cli": "^7.25.7",
+        "@babel/core": "^7.25.8",
+        "@babel/preset-env": "^7.25.8",
+        "@babel/preset-react": "^7.25.7"
+    }
+}
