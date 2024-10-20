@@ -1,5 +1,6 @@
 {
     "scripts": {
+        "dev": "next dev",
         "build": "babel components --out-dir ../backend/app/static/js"
     },
     "devDependencies": {
@@ -7,5 +8,10 @@
         "@babel/core": "^7.25.8",
         "@babel/preset-env": "^7.25.8",
         "@babel/preset-react": "^7.25.7"
+    },
+    "dependencies": {
+        "autoprefixer": "^10.4.20",
+        "postcss": "^8.4.47",
+        "tailwindcss": "^3.4.14"
     }
 }

@@ -17,6 +17,7 @@ const TimeOffRequestForm = ({ onRequestSubmitted }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        credentials: 'include'  // Add this line
       });
       if (response.status === 401) {
         // Token might be expired, try to refresh

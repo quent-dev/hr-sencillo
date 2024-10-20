@@ -1,16 +1,37 @@
 function RequestTimeOffPage() {
   const [confirmationMessage, setConfirmationMessage] = React.useState(null);
   const [isError, setIsError] = React.useState(false);
+  const [user, setUser] = React.useState(null);
+
+  React.useEffect(() => {
+    fetch('/api/auth/user')
+      .then(response => response.json())
+      .then(data => {
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          window.location.href = '/';
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching user:', error);
+        window.location.href = '/';
+      });
+  }, []);
 
   const handleRequestSubmitted = (message, error = false) => {
     setConfirmationMessage(message);
     setIsError(error);
   };
 
+  if (!user) {
+    return React.createElement('div', null, 'Loading...');
+  }
+
   return React.createElement(
     'div',
     null,
-    React.createElement('h1', null, 'Request Time Off'),
+    React.createElement('h1', null, `Request Time Off for ${user}`),
     confirmationMessage && React.createElement(
       'div',
       { 

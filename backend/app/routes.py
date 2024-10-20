@@ -30,6 +30,8 @@ def login():
         session['user'] = user.email
         session['access_token'] = response.session.access_token
         session['refresh_token'] = response.session.refresh_token
+        session.permanent = True
+        logger.debug(f"Session after login: {session}")
         return jsonify({'user': user.email}), 200
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
@@ -41,39 +43,22 @@ def logout():
     return jsonify({'message': 'Logged out successfully'}), 200
 
 @app.route('/api/auth/user')
-def get_user():
-    user = session.get('user')
-    return jsonify({'user': user}), 200 if user else 401
+def get_current_user():
+    if 'user' in session:
+        return jsonify({'user': session['user']}), 200
+    else:
+        return jsonify({'error': 'Not authenticated'}), 401
 
 @app.route('/api/request-time-off', methods=['POST'])
 def request_time_off():
-    if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
+    
     data = request.json
     
     try:
-        access_token = session.get('access_token')
-        if not access_token:
-            return jsonify({'error': 'Authentication failed'}), 401
-
-        try:
-            user_response = supabase.auth.get_user(access_token)
-            user = user_response.user
-        except AuthApiError:
-            refresh_token = session.get('refresh_token')
-            if not refresh_token:
-                return jsonify({'error': 'Session expired. Please log in again.'}), 401
-            
-            refresh_response = supabase.auth.refresh_session(refresh_token)
-            session['access_token'] = refresh_response.session.access_token
-            session['refresh_token'] = refresh_response.session.refresh_token
-            user = refresh_response.user
-
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-
-        employee = supabase.table('Employee').select('*').eq('email', user.email).execute()
+        user_email = data['email']
+        logger.debug(f"User email from session: {user_email}")
+        employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
+        
         if not employee.data:
             return jsonify({'error': 'Employee not found'}), 404
 
@@ -97,7 +82,7 @@ def request_time_off():
             'comments': data.get('comments', ''),
             'status': 'pending'
         }
-
+        logger.debug(f'New request data: {new_request_data}')
         new_request = supabase.table('TimeOffRequest').insert(new_request_data).execute()
 
         if new_request.data:
@@ -115,20 +100,13 @@ def request_time_off():
 #     all_employees = supabase.table('Employee').select('*').execute()
 #     logger.debug(f"All employees: {all_employees.data}")
 
-# Add this new function:
-@app.before_request
-def log_request_info():
-    logger.debug('Headers: %s', request.headers)
-    logger.debug('Body: %s', request.get_data())
-    logger.debug('URL: %s', request.url)
+# # Add this new function:
+# @app.before_request
+# def log_request_info():
+#     logger.debug('Headers: %s', request.headers)
+#     logger.debug('Body: %s', request.get_data())
+#     logger.debug('URL: %s', request.url)
 
-@app.route('/api/test-employees')
-def test_employees():
-    try:
-        all_employees = supabase.table('Employee').select('*').execute()
-        return jsonify(all_employees.data), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/<path:undefined_route>')
 def undefined_route(undefined_route):
@@ -167,66 +145,83 @@ def profile_page():
         return redirect(url_for('index'))
     return render_template('profile.html')
 
-@app.route('/api/profile')
+@app.route('/api/profile', methods=['GET', 'POST'])
 def get_profile():
+    if request.method == 'POST':
+        logger.debug(f"Raw request data: {request.data}")  # Log raw request data
+        logger.debug(f"Request headers: {request.headers}")  # Log request headers
+        # logger.debug(f"Request JSON: {request.json}")
+        # Check if the request is JSON
+        reqdata =request.get_json(force=True)
+        # if not reqdata.is_json:
+        #     logger.error('Request not in JSON')
+        #     return jsonify({'error': 'Invalid request format'}), 400
+
+        user_email = reqdata.get('user')  # Use request.json to get the parsed JSON
+        logger.debug(f'user: {user_email}')
+        if not user_email:
+            return jsonify({'error': 'User email not provided'}), 400
+
+        try:
+            employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
+            
+            if not employee.data:
+                return jsonify({'error': 'Employee not found'}), 404
+
+            employee_data = employee.data[0]
+            logger.debug(f'Employee data: {employee_data}')
+            current_year = datetime.now().year
+            
+            # Fetch all time off requests for this employee
+            time_off_requests = supabase.table('TimeOffRequest').select('*').eq('employee_id', employee_data['id']).execute()
+            
+            # Calculate days taken and process request data
+            days_taken = 0
+            extra_work_days = 0
+            processed_requests = []
+            for req in time_off_requests.data:
+                start_date = datetime.strptime(req['start_date'], '%Y-%m-%d').date()
+                end_date = datetime.strptime(req['end_date'], '%Y-%m-%d').date()
+                days = (end_date - start_date).days + 1
+                
+                if start_date.year == current_year:
+                    if req['request_type'] == 'extra_work_hours':
+                        extra_work_days += days
+                    else:
+                        days_taken += days
+                
+                processed_requests.append({
+                    'id': req['id'],  # Include the id of the request
+                    'start_date': req['start_date'],
+                    'end_date': req['end_date'],
+                    'request_type': req['request_type'],
+                    'status': req['status'],
+                    'total_days': days if req['request_type'] != 'extra_work_hours' else -days
+                })
+
+            net_days_taken = days_taken - extra_work_days
+            
+            profile_data = {
+                'name': employee_data['name'],
+                'email': employee_data['email'],
+                'total_days_off': employee_data['days_off_total'],
+                'days_taken': days_taken,
+                'extra_work_days': extra_work_days,
+                'net_days_taken': net_days_taken,
+                'remaining_days': employee_data['days_off_total'] - net_days_taken,
+                'time_off_requests': processed_requests
+            }
+
+            return jsonify(profile_data), 200
+
+        except Exception as e:
+            logger.error(f"An error occurred while fetching profile: {str(e)}")
+            return jsonify({'error': 'An unexpected error occurred'}), 500
+
+    # Handle GET request
     if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    try:
-        user_email = session['user']
-        employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
-        
-        if not employee.data:
-            return jsonify({'error': 'Employee not found'}), 404
-
-        employee_data = employee.data[0]
-        current_year = datetime.now().year
-        
-        # Fetch all time off requests for this employee
-        time_off_requests = supabase.table('TimeOffRequest').select('*').eq('employee_id', employee_data['id']).execute()
-        
-        # Calculate days taken and process request data
-        days_taken = 0
-        extra_work_days = 0
-        processed_requests = []
-        for req in time_off_requests.data:
-            start_date = datetime.strptime(req['start_date'], '%Y-%m-%d').date()
-            end_date = datetime.strptime(req['end_date'], '%Y-%m-%d').date()
-            days = (end_date - start_date).days + 1
-            
-            if start_date.year == current_year:
-                if req['request_type'] == 'extra_work_hours':
-                    extra_work_days += days
-                else:
-                    days_taken += days
-            
-            processed_requests.append({
-                'id': req['id'],  # Include the id of the request
-                'start_date': req['start_date'],
-                'end_date': req['end_date'],
-                'request_type': req['request_type'],
-                'status': req['status'],
-                'total_days': days if req['request_type'] != 'extra_work_hours' else -days
-            })
-
-        net_days_taken = days_taken - extra_work_days
-        
-        profile_data = {
-            'name': employee_data['name'],
-            'email': employee_data['email'],
-            'total_days_off': employee_data['days_off_total'],
-            'days_taken': days_taken,
-            'extra_work_days': extra_work_days,
-            'net_days_taken': net_days_taken,
-            'remaining_days': employee_data['days_off_total'] - net_days_taken,
-            'time_off_requests': processed_requests
-        }
-
-        return jsonify(profile_data), 200
-
-    except Exception as e:
-        logger.error(f"An error occurred while fetching profile: {str(e)}")
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        return redirect(url_for('index'))
+    return render_template('profile.html')
 
 @app.route('/api/profile/update', methods=['POST'])
 def update_profile():
@@ -337,3 +332,9 @@ def delete_request(request_id):
     except Exception as e:
         logger.error(f"An error occurred while deleting request: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+
+
+
+
+
