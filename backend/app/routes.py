@@ -148,17 +148,10 @@ def profile_page():
 @app.route('/api/profile', methods=['GET', 'POST'])
 def get_profile():
     if request.method == 'POST':
-        logger.debug(f"Raw request data: {request.data}")  # Log raw request data
-        logger.debug(f"Request headers: {request.headers}")  # Log request headers
-        # logger.debug(f"Request JSON: {request.json}")
-        # Check if the request is JSON
+        
         reqdata =request.get_json(force=True)
-        # if not reqdata.is_json:
-        #     logger.error('Request not in JSON')
-        #     return jsonify({'error': 'Invalid request format'}), 400
 
         user_email = reqdata.get('user')  # Use request.json to get the parsed JSON
-        logger.debug(f'user: {user_email}')
         if not user_email:
             return jsonify({'error': 'User email not provided'}), 400
 
@@ -169,7 +162,6 @@ def get_profile():
                 return jsonify({'error': 'Employee not found'}), 404
 
             employee_data = employee.data[0]
-            logger.debug(f'Employee data: {employee_data}')
             current_year = datetime.now().year
             
             # Fetch all time off requests for this employee
@@ -254,11 +246,12 @@ def edit_request_page(request_id):
 
 @app.route('/api/request/<int:request_id>', methods=['GET'])
 def get_request(request_id):
-    if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
+    # if 'user' not in session:
+    #     return jsonify({'error': 'Unauthorized'}), 401
+    logger.debug(request)
+    user_email =request.headers.get('user')
+    
     try:
-        user_email = session['user']
         employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
         
         if not employee.data:
@@ -266,12 +259,12 @@ def get_request(request_id):
 
         employee_id = employee.data[0]['id']
         
-        request = supabase.table('TimeOffRequest').select('*').eq('id', request_id).eq('employee_id', employee_id).execute()
+        requestdb = supabase.table('TimeOffRequest').select('*').eq('id', request_id).eq('employee_id', employee_id).execute()
         
-        if not request.data:
+        if not requestdb.data:
             return jsonify({'error': 'Request not found'}), 404
 
-        return jsonify(request.data[0]), 200
+        return jsonify(requestdb.data[0]), 200
 
     except Exception as e:
         logger.error(f"An error occurred while fetching request: {str(e)}")
