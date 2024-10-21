@@ -58,6 +58,14 @@ def request_time_off():
         user_email = data['email']
         logger.debug(f"User email from session: {user_email}")
         employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
+
+        managers = supabase.table('Employee').select('*').eq('role', 'manager').execute()
+
+        manager_id = None
+        for manager in managers.data:
+            if manager['email'] == employee.data[0]['manager_email']:
+                manager_id = manager['id']
+                break
         
         if not employee.data:
             return jsonify({'error': 'Employee not found'}), 404
@@ -81,7 +89,7 @@ def request_time_off():
             'request_type': data['request_type'],
             'comments': data.get('comments', ''),
             'status': 'pending',
-            'manager_id': employee.data[0]['manager_email'],
+            'manager_id': manager_id,
             'employee_name': employee.data[0]['name']
         }
         logger.debug(f'New request data: {new_request_data}')
@@ -165,11 +173,13 @@ def get_profile():
                 end_date = datetime.strptime(req['end_date'], '%Y-%m-%d').date()
                 days = (end_date - start_date).days + 1
                 
-                if start_date.year == current_year:
-                    if req['request_type'] == 'extra_work_hours':
-                        extra_work_days += days
-                    else:
-                        days_taken += days
+                # Include only approved and pending requests in the calculation
+                if req['status'] in ['approved', 'pending']:
+                    if start_date.year == current_year:
+                        if req['request_type'] == 'extra_work_hours':
+                            extra_work_days += days
+                        else:
+                            days_taken += days
                 
                 processed_requests.append({
                     'id': req['id'],  # Include the id of the request
@@ -194,7 +204,7 @@ def get_profile():
             }
 
             return jsonify(profile_data), 200
-
+            
         except Exception as e:
             logger.error(f"An error occurred while fetching profile: {str(e)}")
             return jsonify({'error': 'An unexpected error occurred'}), 500
@@ -353,6 +363,7 @@ def get_team_requests():
     requests = supabase.table('TimeOffRequest').select('*').eq('manager_id', manager_id).execute()
 
     return jsonify(requests.data), 200
+
 
 
 

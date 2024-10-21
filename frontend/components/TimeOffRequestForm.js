@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useUser } from '../context/UserContext';
+import { useRouter } from 'next/router'; // Import useRouter
 
 const TimeOffRequestForm = ({ onRequestSubmitted }) => {
     const { user } = useUser();
+    const router = useRouter(); // Initialize useRouter
     const [formData, setFormData] = useState({
         email: user,
         start_date: '',
@@ -49,6 +51,9 @@ const TimeOffRequestForm = ({ onRequestSubmitted }) => {
                 const data = await response.json();
                 console.log('Response data:', data);
                 onRequestSubmitted(data.message);
+                
+                // Redirect to the profile page after submission
+                router.push('/profile'); // Redirect to the profile page
             }
         } catch (error) {
             console.error('Error:', error);

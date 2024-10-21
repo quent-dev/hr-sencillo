@@ -91,6 +91,19 @@ const MyTeamPage = () => {
     return request.status === filter;
   });
 
+  const getStatusClass = (status) => {
+    switch (status) {
+      case 'approved':
+        return 'text-green-500'; // Green for approved
+      case 'pending':
+        return 'text-orange-500'; // Orange for pending
+      case 'denied':
+        return 'text-red-500'; // Red for denied
+      default:
+        return 'text-gray-500'; // Default color for unknown status
+    }
+  };
+
   if (loading) {
     return <div>Loading...</div>;
   }
@@ -130,10 +143,22 @@ const MyTeamPage = () => {
               <td className="border px-4 py-2">{request.start_date}</td>
               <td className="border px-4 py-2">{request.end_date}</td>
               <td className="border px-4 py-2">{request.request_type}</td>
-              <td className="border px-4 py-2">{request.status}</td>
+              <td className={`border px-4 py-2 ${getStatusClass(request.status)}`}>
+                {request.status}
+              </td>
               <td className="border px-4 py-2">
-                <button onClick={() => handleApprove(request.id)} className="bg-green-500 text-white px-2 py-1 rounded">Approve</button>
-                <button onClick={() => handleReject(request.id)} className="bg-red-500 text-white px-2 py-1 rounded ml-2">Reject</button>
+                {request.status === 'pending' && (
+                  <>
+                    <button onClick={() => handleApprove(request.id)} className="bg-green-500 text-white px-2 py-1 rounded">Approve</button>
+                    <button onClick={() => handleReject(request.id)} className="bg-red-500 text-white px-2 py-1 rounded ml-2">Reject</button>
+                  </>
+                )}
+                {request.status === 'approved' && (
+                  <button onClick={() => handleReject(request.id)} className="bg-red-500 text-white px-2 py-1 rounded ml-2">Reject</button>
+                )}
+                {request.status === 'denied' && (
+                  <button onClick={() => handleApprove(request.id)} className="bg-green-500 text-white px-2 py-1 rounded">Approve</button>
+                )}
               </td>
             </tr>
           ))}
