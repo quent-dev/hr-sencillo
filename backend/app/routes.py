@@ -272,11 +272,10 @@ def get_request(request_id):
 
 @app.route('/api/request/<int:request_id>', methods=['PUT'])
 def update_request(request_id):
-    if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
+    # if 'user' not in session:
+    #     return jsonify({'error': 'Unauthorized'}), 401
+    user_email =request.headers.get('user')
     try:
-        user_email = session['user']
         employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
         
         if not employee.data:
@@ -303,11 +302,8 @@ def update_request(request_id):
 
 @app.route('/api/request/<int:request_id>', methods=['DELETE'])
 def delete_request(request_id):
-    if 'user' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
+    user_email =request.headers.get('user')
     try:
-        user_email = session['user']
         employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
         
         if not employee.data:

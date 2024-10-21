@@ -4,9 +4,8 @@ export default async function handler(req, res) {
   const id = req.query; // Get the request ID from the query parameters
   console.log(id);
   const flaskApiUrl = `http://127.0.0.1:5000/api/request/${id['id']}`; // Your Flask API URL
-
+  const userEmail = req.headers["user"];
   if (req.method === 'GET') {
-    const userEmail = req.headers["user"];
     console.log(req.headers);
     try {
       const response = await fetch(flaskApiUrl, {
@@ -33,7 +32,10 @@ export default async function handler(req, res) {
     try {
       const response = await fetch(flaskApiUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'user': userEmail
+         },
         body: JSON.stringify(req.body), // Forward the request body
       });
       console.log(req.body)
@@ -54,6 +56,10 @@ export default async function handler(req, res) {
     try {
       const response = await fetch(flaskApiUrl, {
         method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          'user': userEmail
+         }
       });
 
       const data = await response.json();

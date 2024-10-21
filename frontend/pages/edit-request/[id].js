@@ -6,7 +6,7 @@ import LoginForm from '../../components/LoginForm';
 
 
 const EditRequestPage = () => {
-  const { user, setUser } = useUser();
+  const { user, setUser, loading } = useUser();
   const router = useRouter();
   const { id } = router.query; // Get the request ID from the URL
   const [formData, setFormData] = useState({
@@ -34,8 +34,6 @@ const EditRequestPage = () => {
       if (response.ok) {
         const data = await response.json();
         setFormData({
-          id: requestId,
-          user: user,
           start_date: data.start_date,
           end_date: data.end_date,
           request_type: data.request_type,
@@ -58,7 +56,10 @@ const EditRequestPage = () => {
     try {
       const response = await fetch(`/api/request/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'user': user
+        },
         body: JSON.stringify(formData),
       });
       if (response.ok) {
@@ -78,6 +79,10 @@ const EditRequestPage = () => {
       try {
         const response = await fetch(`/api/request/${id}`, {
           method: 'DELETE',
+          headers: { 
+            'Content-Type': 'application/json',
+            'user': user
+          }
         });
         if (response.ok) {
           alert('Request deleted successfully');
@@ -92,18 +97,22 @@ const EditRequestPage = () => {
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-md">
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Login to your account
-          </h2>
-          <LoginForm onLogin={setUser} />
-        </div>
-      </div>
-    );
+  if (loading) {
+    return <div>Loading...</div>;
   }
+
+  // if (!user) {
+  //   return (
+  //     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+  //       <div className="max-w-md w-full space-y-8 p-10 bg-white rounded-xl shadow-md">
+  //         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+  //           Login to your account
+  //         </h2>
+  //         <LoginForm onLogin={setUser} />
+  //       </div>
+  //     </div>
+  //   );
+  // }
   
 
   return (
