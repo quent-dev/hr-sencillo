@@ -80,7 +80,9 @@ def request_time_off():
             'end_date': str(end_date),
             'request_type': data['request_type'],
             'comments': data.get('comments', ''),
-            'status': 'pending'
+            'status': 'pending',
+            'manager_id': employee.data[0]['manager_email'],
+            'employee_name': employee.data[0]['name']
         }
         logger.debug(f'New request data: {new_request_data}')
         new_request = supabase.table('TimeOffRequest').insert(new_request_data).execute()
@@ -93,19 +95,6 @@ def request_time_off():
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
-
-# This should be outside the route function
-# @app.before_first_request
-# def log_all_employees():
-#     all_employees = supabase.table('Employee').select('*').execute()
-#     logger.debug(f"All employees: {all_employees.data}")
-
-# # Add this new function:
-# @app.before_request
-# def log_request_info():
-#     logger.debug('Headers: %s', request.headers)
-#     logger.debug('Body: %s', request.get_data())
-#     logger.debug('URL: %s', request.url)
 
 
 @app.route('/<path:undefined_route>')
@@ -272,9 +261,11 @@ def get_request(request_id):
 
 @app.route('/api/request/<int:request_id>', methods=['PUT'])
 def update_request(request_id):
-    # if 'user' not in session:
-    #     return jsonify({'error': 'Unauthorized'}), 401
-    user_email =request.headers.get('user')
+    logger.debug(request.headers)
+    user_email = request.headers.get('user')
+    role = request.headers.get('role')  # Get the role from the headers
+    approval = request.headers.get('approval')  # Get the approval status from the headers
+
     try:
         employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
         
@@ -283,6 +274,24 @@ def update_request(request_id):
 
         employee_id = employee.data[0]['id']
         
+        # If the role is manager and approval is specified
+        if role == 'manager':
+            if approval is not None:
+                # Convert approval to boolean
+                is_approved = approval.lower() == 'true'
+                status = 'approved' if is_approved else 'denied'
+
+                # Update the request status
+                updated_request = supabase.table('TimeOffRequest').update({
+                    'status': status
+                }).eq('id', request_id).execute()
+
+                if not updated_request.data:
+                    return jsonify({'error': 'Failed to update request status'}), 500
+
+                return jsonify({'message': f'Request {status} successfully'}), 200
+
+        # If the request is from the employee updating their own request
         data = request.json
         updated_request = supabase.table('TimeOffRequest').update({
             'start_date': data['start_date'],
@@ -321,6 +330,32 @@ def delete_request(request_id):
     except Exception as e:
         logger.error(f"An error occurred while deleting request: {str(e)}")
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@app.route('/api/myteam', methods=['GET'])
+def get_team_requests():
+    # if 'user' not in session:
+    #     return jsonify({'error': 'Unauthorized'}), 401
+
+    # user_email = session['user']
+    user_email = request.headers.get('user')
+    
+    # Fetch the employee ID of the manager
+    employee = supabase.table('Employee').select('*').eq('email', user_email).execute()
+    logger.debug(user_email)
+    logger.debug(employee.data)
+    
+    if not employee.data or employee.data[0]['role'] != 'manager':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    manager_id = employee.data[0]['id']
+
+    # Fetch all time-off requests for the team
+    requests = supabase.table('TimeOffRequest').select('*').eq('manager_id', manager_id).execute()
+
+    return jsonify(requests.data), 200
+
+
+
 
 
 

@@ -30,12 +30,10 @@ export default async function handler(req, res) {
 
   if (req.method === 'PUT') {
     try {
+      const headers = req.headers
       const response = await fetch(flaskApiUrl, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'user': userEmail
-         },
+        headers: headers,
         body: JSON.stringify(req.body), // Forward the request body
       });
       console.log(req.body)

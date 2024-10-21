@@ -101,6 +101,7 @@ const ProfilePage = () => {
           <p>Name: {profileData.name}</p>
           <p>Email: {profileData.email}</p>
           <button onClick={handleEdit} className="bg-green-500 text-white px-4 py-2 rounded mt-2">Edit Profile</button>
+          <Link href={`/myteam`} className="bg-blue-500 text-white px-4 py-2 rounded mt-2">See My Team requests</Link>
         </div>
       )}
       <h2 className="text-xl font-bold mt-6 mb-2">Time Off Information</h2>
